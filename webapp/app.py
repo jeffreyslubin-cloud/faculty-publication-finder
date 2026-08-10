@@ -18,7 +18,9 @@ if uploaded_file is not None:
         sheet_name="Faculty Roster"
 )
 
-st.success(f"Roster uploaded: {len(roster)} rows")
+st.write(roster.head())
+
+# st.success(f"Roster uploaded: {len(roster)} rows")
 
 if st.button("Run Search"):
     st.write(f"Start: {start_date}")
