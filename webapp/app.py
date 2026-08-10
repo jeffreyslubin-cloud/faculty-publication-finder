@@ -38,7 +38,7 @@ else:
     f"Roster validated: {len(roster)} faculty loaded"
 )
 
-    st.write(roster.columns.tolist())
+    st.session_state["roster"] = roster
 
 # st.success(f"Roster uploaded: {len(roster)} rows")
 
