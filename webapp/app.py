@@ -11,13 +11,13 @@ start_date = st.date_input("Start Date")
 end_date = st.date_input("End Date")
 
 if uploaded_file is not None:
-st.success("Roster uploaded")
+    st.success("Roster uploaded")
 
 if st.button("Run Search"):
-st.write(f"Start: {start_date}")
-st.write(f"End: {end_date}")
+    st.write(f"Start: {start_date}")
+    st.write(f"End: {end_date}")
 
-if uploaded_file is None:
-st.error("Please upload a roster file.")
-else:
-st.success("Ready to run search")
+    if uploaded_file is None:
+        st.error("Please upload a roster file.")
+    else:
+        st.success("Ready to run search")
