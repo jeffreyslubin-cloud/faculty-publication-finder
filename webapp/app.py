@@ -18,7 +18,7 @@ if uploaded_file is not None:
         sheet_name="Faculty Roster"
 )
 
-st.write(roster.head())
+    st.write(roster.head())
 
 # st.success(f"Roster uploaded: {len(roster)} rows")
 
