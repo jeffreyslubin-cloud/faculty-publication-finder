@@ -53,3 +53,4 @@ if st.button("Run Search"):
 
         st.success("Ready to run search")
         st.write(f"Faculty loaded: {len(roster)}")
+        st.write(roster.iloc[0]["Faculty Name"])
