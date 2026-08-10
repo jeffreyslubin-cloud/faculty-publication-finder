@@ -18,7 +18,25 @@ if uploaded_file is not None:
         sheet_name="Faculty Roster"
 )
 
-    st.write(roster.head())
+required_columns = [
+"Last Name",
+"First Name / Initial",
+"PubMed Initials"
+]
+
+missing_columns = [
+    col for col in required_columns
+    if col not in roster.columns
+]
+
+if missing_columns:
+    st.error(
+    "Missing columns: " + ", ".join(missing_columns)
+    )
+else:
+    st.success(
+    f"Roster validated: {len(roster)} faculty loaded"
+)
 
 # st.success(f"Roster uploaded: {len(roster)} rows")
 
