@@ -11,7 +11,14 @@ start_date = st.date_input("Start Date")
 end_date = st.date_input("End Date")
 
 if uploaded_file is not None:
-    st.success("Roster uploaded")
+    mport pandas as pd
+
+    roster = pd.read_excel(
+        uploaded_file,
+        sheet_name="Faculty Roster"
+)
+
+st.success(f"Roster uploaded: {len(roster)} rows")
 
 if st.button("Run Search"):
     st.write(f"Start: {start_date}")
