@@ -38,6 +38,8 @@ else:
     f"Roster validated: {len(roster)} faculty loaded"
 )
 
+    st.write(roster.columns.tolist())
+
 # st.success(f"Roster uploaded: {len(roster)} rows")
 
 if st.button("Run Search"):
