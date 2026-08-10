@@ -1,3 +1,7 @@
+from pubmed_faculty_edat_strict import build_query
+from pubmed_faculty_edat_strict import search_pmids
+from datetime import datetime
+
 import streamlit as st
 
 st.title("Faculty Publication Finder")
@@ -43,14 +47,31 @@ else:
 # st.success(f"Roster uploaded: {len(roster)} rows")
 
 if st.button("Run Search"):
-    st.write(f"Start: {start_date}")
-    st.write(f"End: {end_date}")
 
     if uploaded_file is None:
         st.error("Please upload a roster file.")
+
     else:
+
         roster = st.session_state["roster"]
 
-        st.success("Ready to run search")
-        st.write(f"Faculty loaded: {len(roster)}")
-        st.write(roster.iloc[0]["Faculty Name"])
+        faculty = roster.iloc[0]
+
+        start_string = start_date.strftime("%Y/%m/%d")
+        end_string = end_date.strftime("%Y/%m/%d")
+
+        query = build_query(
+            faculty,
+            start_string,
+            end_string
+        )
+
+        st.write("Faculty:")
+        st.write(faculty["Faculty Name"])
+
+        st.write("Query:")
+        st.code(query)
+
+        pmids = search_pmids(query)
+
+        st.write(f"PMIDs Found: {len(pmids)}")
