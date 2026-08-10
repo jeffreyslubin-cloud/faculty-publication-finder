@@ -49,4 +49,7 @@ if st.button("Run Search"):
     if uploaded_file is None:
         st.error("Please upload a roster file.")
     else:
+        roster = st.session_state["roster"]
+
         st.success("Ready to run search")
+        st.write(f"Faculty loaded: {len(roster)}")
