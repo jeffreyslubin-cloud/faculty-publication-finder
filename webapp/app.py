@@ -90,7 +90,8 @@ if st.button("Run Search"):
         roster,
         start_string,
         end_string,
-        progress_callback=update_progress
+        progress_callback=update_progress,
+        test_mode=test_mode
     )
 
     status.success(

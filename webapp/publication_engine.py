@@ -20,7 +20,8 @@ def run_search(
     roster,
     start_date,
     end_date,
-    progress_callback=None
+    progress_callback=None,
+    test_mode=False
 ):
 
     roster = roster.dropna(
@@ -31,15 +32,18 @@ def run_search(
     article_cache = {}
     excluded_counts = defaultdict(int)
 
-    total = len(roster)
+    search_roster = (
+        roster.head(10)
+        if test_mode
+        else roster
+    )
+
+    total = len(search_roster)
 
     for number, (_, faculty) in enumerate(
-        roster.iterrows(),
+        search_roster.iterrows(),
         start=1
     ):
-
-        if number > 10:
-            break
 
         if progress_callback:
             progress_callback(
