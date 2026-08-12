@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+from publication_engine import run_search
 from datetime import datetime
 from pubmed_faculty_edat_strict import (
     build_query,
@@ -14,6 +15,8 @@ from pubmed_faculty_edat_strict import (
 st.set_page_config(page_title="Faculty Publication Finder", layout="wide")
 
 st.title("Faculty Publication Finder")
+
+st.write("publication_engine imported successfully")
 
 uploaded_file = st.file_uploader(
     "Upload Faculty Roster (.xlsx)",

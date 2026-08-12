@@ -1,0 +1,99 @@
+from collections import defaultdict
+import pandas as pd
+
+from pubmed_faculty_edat_strict import (
+    canonical_faculty_name,
+    build_query,
+    search_pmids,
+    fetch_records,
+    parse_article,
+    classify_match,
+    keep_candidate,
+)
+
+
+def run_search(roster, start_date, end_date, progress_callback=None):
+
+    roster = roster.dropna(
+        subset=["Last Name", "PubMed Initials"]
+    ).copy()
+
+    kept_matches = []
+    article_cache = {}
+    excluded_counts = defaultdict(int)
+
+    total = len(roster)
+
+    for number, (_, faculty) in enumerate(
+        roster.iterrows(),
+        start=1
+    ):
+
+        if progress_callback:
+            progress_callback(
+                number,
+                total,
+                canonical_faculty_name(faculty)
+            )
+
+        faculty_name = canonical_faculty_name(faculty)
+
+        query = build_query(
+            faculty,
+            start_date,
+            end_date
+        )
+
+        pmids = search_pmids(query)
+
+        missing_pmids = [
+            pmid
+            for pmid in pmids
+            if pmid not in article_cache
+        ]
+
+        if missing_pmids:
+            for raw_record in fetch_records(
+                missing_pmids
+            ):
+                parsed = parse_article(raw_record)
+
+                if parsed["PMID"]:
+                    article_cache[
+                        parsed["PMID"]
+                    ] = parsed
+
+        for pmid in pmids:
+
+            article = article_cache.get(pmid)
+
+            if not article:
+                continue
+
+            confidence, reason, institution_match, em_match = (
+                classify_match(
+                    faculty,
+                    article
+                )
+            )
+
+            if not keep_candidate(
+                confidence,
+                institution_match,
+                em_match
+            ):
+                excluded_counts[
+                    confidence
+                ] += 1
+                continue
+
+            kept_matches.append({
+                "Faculty Name": faculty_name,
+                "Confidence": confidence,
+                "Reason": reason,
+                "PMID": article["PMID"],
+                "PubMed Entry Date": article["PubMed Entry Date"],
+                "Publication Date": article["Publication Date"],
+                "Title": article["Title"],
+                "Journal": article["Journal"],
+     
