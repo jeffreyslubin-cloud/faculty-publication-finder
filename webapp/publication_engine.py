@@ -96,4 +96,16 @@ def run_search(roster, start_date, end_date, progress_callback=None):
                 "Publication Date": article["Publication Date"],
                 "Title": article["Title"],
                 "Journal": article["Journal"],
-     
+                     "Authors": article["Authors"],
+                "Affiliations": article["Affiliations"],
+                "Penn State/Hershey Affiliation":
+                    "Yes" if institution_match else "No",
+                "Emergency Medicine Affiliation":
+                    "Yes" if em_match else "No",
+                "DOI": article["DOI"],
+                "Publication Types":
+                    article["Publication Types"],
+                "Search Query": query,
+            })
+
+    return pd.DataFrame(kept_matches)
