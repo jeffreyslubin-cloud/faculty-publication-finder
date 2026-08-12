@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-from publication_engine import build_workbook, run_search
+from publication_engine import PubMedRequestError, build_workbook, run_search
 
 st.set_page_config(
     page_title="Faculty Publication Finder",
@@ -86,13 +86,24 @@ if st.button("Run Search"):
             f"{faculty_name}"
         )
 
-    results, unique, summary = run_search(
-        roster,
-        start_string,
-        end_string,
-        progress_callback=update_progress,
-        test_mode=test_mode
-    )
+    try:
+        results, unique, summary = run_search(
+            roster,
+            start_string,
+            end_string,
+            progress_callback=update_progress,
+            test_mode=test_mode
+        )
+    except PubMedRequestError as error:
+        status.error(
+            "PubMed request failed"
+        )
+        st.error(str(error))
+        st.info(
+            "PubMed may be temporarily limiting requests. "
+            "Try the search again after a short interval."
+        )
+        st.stop()
 
     status.success(
         "Search complete"
