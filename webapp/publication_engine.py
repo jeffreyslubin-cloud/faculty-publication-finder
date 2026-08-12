@@ -1,4 +1,6 @@
 from collections import defaultdict
+import time
+
 import pandas as pd
 
 from pubmed_faculty_edat_strict import (
@@ -12,7 +14,12 @@ from pubmed_faculty_edat_strict import (
 )
 
 
-def run_search(roster, start_date, end_date, progress_callback=None):
+def run_search(
+    roster,
+    start_date,
+    end_date,
+    progress_callback=None
+):
 
     roster = roster.dropna(
         subset=["Last Name", "PubMed Initials"]
@@ -29,8 +36,8 @@ def run_search(roster, start_date, end_date, progress_callback=None):
         start=1
     ):
 
-    if number > 10:
-        break
+        if number > 10:
+            break
 
         if progress_callback:
             progress_callback(
@@ -39,7 +46,9 @@ def run_search(roster, start_date, end_date, progress_callback=None):
                 canonical_faculty_name(faculty)
             )
 
-        faculty_name = canonical_faculty_name(faculty)
+        faculty_name = canonical_faculty_name(
+            faculty
+        )
 
         query = build_query(
             faculty,
@@ -49,7 +58,6 @@ def run_search(roster, start_date, end_date, progress_callback=None):
 
         pmids = search_pmids(query)
 
-        import time
         time.sleep(0.5)
 
         missing_pmids = [
@@ -59,19 +67,26 @@ def run_search(roster, start_date, end_date, progress_callback=None):
         ]
 
         if missing_pmids:
+
             for raw_record in fetch_records(
                 missing_pmids
             ):
-                parsed = parse_article(raw_record)
+
+                parsed = parse_article(
+                    raw_record
+                )
 
                 if parsed["PMID"]:
+
                     article_cache[
                         parsed["PMID"]
                     ] = parsed
 
         for pmid in pmids:
 
-            article = article_cache.get(pmid)
+            article = article_cache.get(
+                pmid
+            )
 
             if not article:
                 continue
@@ -88,9 +103,11 @@ def run_search(roster, start_date, end_date, progress_callback=None):
                 institution_match,
                 em_match
             ):
+
                 excluded_counts[
                     confidence
                 ] += 1
+
                 continue
 
             kept_matches.append({
@@ -98,23 +115,32 @@ def run_search(roster, start_date, end_date, progress_callback=None):
                 "Confidence": confidence,
                 "Reason": reason,
                 "PMID": article["PMID"],
-                "PubMed Entry Date": article["PubMed Entry Date"],
-                "Publication Date": article["Publication Date"],
+                "PubMed Entry Date":
+                    article["PubMed Entry Date"],
+                "Publication Date":
+                    article["Publication Date"],
                 "Title": article["Title"],
                 "Journal": article["Journal"],
-                     "Authors": article["Authors"],
-                "Affiliations": article["Affiliations"],
+                "Authors": article["Authors"],
+                "Affiliations":
+                    article["Affiliations"],
                 "Penn State/Hershey Affiliation":
-                    "Yes" if institution_match else "No",
+                    "Yes"
+                    if institution_match
+                    else "No",
                 "Emergency Medicine Affiliation":
-                    "Yes" if em_match else "No",
+                    "Yes"
+                    if em_match
+                    else "No",
                 "DOI": article["DOI"],
                 "Publication Types":
                     article["Publication Types"],
                 "Search Query": query,
             })
 
-    results = pd.DataFrame(kept_matches)
+    results = pd.DataFrame(
+        kept_matches
+    )
 
     if not results.empty:
 
@@ -136,20 +162,20 @@ def run_search(roster, start_date, end_date, progress_callback=None):
                     "_rank",
                     "Faculty Name",
                     "PubMed Entry Date",
-                    "PMID"
+                    "PMID",
                 ],
                 ascending=[
                     True,
                     True,
                     False,
-                    True
-                ]
+                    True,
+                ],
             )
             .drop(columns=["_rank"])
             .drop_duplicates(
                 subset=[
                     "Faculty Name",
-                    "PMID"
+                    "PMID",
                 ]
             )
         )
