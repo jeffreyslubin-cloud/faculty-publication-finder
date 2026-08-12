@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-from publication_engine import run_search
+from publication_engine import PubMedRequestError, build_workbook, run_search
 
 st.set_page_config(
     page_title="Faculty Publication Finder",
@@ -9,7 +9,6 @@ st.set_page_config(
 )
 
 st.title("Faculty Publication Finder")
-
 
 uploaded_file = st.file_uploader(
     "Upload Faculty Roster (.xlsx)",
@@ -82,12 +81,22 @@ if st.button("Run Search"):
             f"{faculty_name}"
         )
 
-    results, unique, summary = run_search(
-        roster,
-        start_string,
-        end_string,
-        progress_callback=update_progress
-    )
+    try:
+        results, unique, summary = run_search(
+            roster,
+            start_string,
+            end_string,
+            progress_callback=update_progress
+        )
+    except PubMedRequestError as error:
+        status.error("PubMed search stopped")
+        st.error(str(error))
+        st.info(
+            "PubMed temporarily refused or failed a request. "
+            "Try the search again later. If this recurs, adding an "
+            "NCBI API key is the next reliability improvement."
+        )
+        st.stop()
 
     status.success(
         "Search complete"
@@ -130,4 +139,27 @@ if st.button("Run Search"):
     st.dataframe(
         summary,
         use_container_width=True
+    )
+
+
+    workbook_data = build_workbook(
+        results,
+        unique,
+        summary
+    )
+
+    output_filename = (
+        "Penn_State_EM_EDAT_Results_"
+        f"{start_string.replace('/', '')}_to_"
+        f"{end_string.replace('/', '')}.xlsx"
+    )
+
+    st.download_button(
+        label="Download Excel Workbook",
+        data=workbook_data,
+        file_name=output_filename,
+        mime=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        )
     )

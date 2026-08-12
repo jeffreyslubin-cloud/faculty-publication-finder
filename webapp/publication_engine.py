@@ -1,5 +1,7 @@
 from collections import defaultdict
+from io import BytesIO
 import time
+from urllib.error import HTTPError, URLError
 
 import pandas as pd
 
@@ -11,7 +13,76 @@ from pubmed_faculty_edat_strict import (
     parse_article,
     classify_match,
     keep_candidate,
+    format_sheet,
 )
+
+
+RETRYABLE_HTTP_CODES = {408, 429, 500, 502, 503, 504}
+MAX_ATTEMPTS = 6
+BASE_RETRY_SECONDS = 2.0
+MAX_RETRY_SECONDS = 30.0
+REQUEST_SPACING_SECONDS = 0.5
+
+
+class PubMedRequestError(RuntimeError):
+    pass
+
+
+def _retry_pubmed_call(operation, faculty_name, function, *args):
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            time.sleep(REQUEST_SPACING_SECONDS)
+            return function(*args)
+        except HTTPError as error:
+            retryable = error.code in RETRYABLE_HTTP_CODES
+            if not retryable or attempt == MAX_ATTEMPTS:
+                raise PubMedRequestError(
+                    f"PubMed {operation} failed for {faculty_name} "
+                    f"with HTTP {error.code}: {error.reason}"
+                ) from error
+
+            retry_after = error.headers.get("Retry-After") if error.headers else None
+            try:
+                retry_seconds = float(retry_after) if retry_after else None
+            except (TypeError, ValueError):
+                retry_seconds = None
+
+            if retry_seconds is None:
+                retry_seconds = min(
+                    BASE_RETRY_SECONDS * (2 ** (attempt - 1)),
+                    MAX_RETRY_SECONDS,
+                )
+            time.sleep(retry_seconds)
+
+        except URLError as error:
+            if attempt == MAX_ATTEMPTS:
+                raise PubMedRequestError(
+                    f"PubMed {operation} failed for {faculty_name}: {error.reason}"
+                ) from error
+
+            retry_seconds = min(
+                BASE_RETRY_SECONDS * (2 ** (attempt - 1)),
+                MAX_RETRY_SECONDS,
+            )
+            time.sleep(retry_seconds)
+
+
+def _search_pmids_with_retry(query, faculty_name):
+    return _retry_pubmed_call(
+        "search",
+        faculty_name,
+        search_pmids,
+        query,
+    )
+
+
+def _fetch_records_with_retry(pmids, faculty_name):
+    return _retry_pubmed_call(
+        "record fetch",
+        faculty_name,
+        fetch_records,
+        pmids,
+    )
 
 
 def run_search(
@@ -53,9 +124,10 @@ def run_search(
             end_date
         )
 
-        pmids = search_pmids(query)
-
-        time.sleep(0.5)
+        pmids = _search_pmids_with_retry(
+            query,
+            faculty_name
+        )
 
         missing_pmids = [
             pmid
@@ -65,9 +137,12 @@ def run_search(
 
         if missing_pmids:
 
-            for raw_record in fetch_records(
-                missing_pmids
-            ):
+            fetched_records = _fetch_records_with_retry(
+                missing_pmids,
+                faculty_name
+            )
+
+            for raw_record in fetched_records:
 
                 parsed = parse_article(
                     raw_record
@@ -192,6 +267,14 @@ def run_search(
 
     if results.empty:
         unique = pd.DataFrame(columns=unique_columns)
+        summary = pd.DataFrame(
+            columns=[
+                "Faculty Name",
+                "Likely",
+                "Needs Review",
+                "Total Retained",
+            ]
+        )
     else:
         unique = (
             results.groupby("PMID", as_index=False)
@@ -209,4 +292,79 @@ def run_search(
             .rename(columns={"Faculty Name": "Matched Faculty"})
         )
 
-    return results, unique
+        summary = (
+            results.groupby(
+                ["Faculty Name", "Confidence"],
+                dropna=False
+            )
+            .size()
+            .unstack(fill_value=0)
+            .reset_index()
+        )
+
+        for column in ["Likely", "Needs Review"]:
+            if column not in summary.columns:
+                summary[column] = 0
+
+        summary["Total Retained"] = (
+            summary["Likely"]
+            + summary["Needs Review"]
+        )
+
+        summary = summary[
+            [
+                "Faculty Name",
+                "Likely",
+                "Needs Review",
+                "Total Retained",
+            ]
+        ]
+
+    return results, unique, summary
+
+
+def build_workbook(
+    results,
+    unique,
+    summary
+):
+    output = BytesIO()
+
+    with pd.ExcelWriter(
+        output,
+        engine="openpyxl"
+    ) as writer:
+        unique.to_excel(
+            writer,
+            sheet_name="Unique Publications",
+            index=False
+        )
+        results.to_excel(
+            writer,
+            sheet_name="Faculty Matches",
+            index=False
+        )
+        summary.to_excel(
+            writer,
+            sheet_name="Review Summary",
+            index=False
+        )
+
+        format_sheet(
+            writer,
+            "Unique Publications",
+            unique
+        )
+        format_sheet(
+            writer,
+            "Faculty Matches",
+            results
+        )
+        format_sheet(
+            writer,
+            "Review Summary",
+            summary
+        )
+
+    output.seek(0)
+    return output.getvalue()
