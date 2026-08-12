@@ -1,0 +1,181 @@
+def format_sheet(writer: pd.ExcelWriter, sheet_name: str, dataframe: pd.DataFrame) -> None:
+    worksheet = writer.book[sheet_name]
+    worksheet.freeze_panes = "A2"
+    worksheet.auto_filter.ref = worksheet.dimensions
+
+    for column_number, column_name in enumerate(dataframe.columns, start=1):
+        values = [clean_text(column_name)]
+        values.extend(clean_text(value) for value in dataframe[column_name].head(300))
+        width = min(max(len(value) for value in values) + 2, 60)
+        letter = worksheet.cell(1, column_number).column_letter
+        worksheet.column_dimensions[letter].width = width
+
+    from openpyxl.styles import Alignment, Font, PatternFill
+    header_fill = PatternFill("solid", fgColor="1F4E78")
+    for cell in worksheet[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = header_fill
+        cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    for row in worksheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+
+def main() -> None:
+    folder = Path(__file__).resolve().parent
+    input_path = folder / INPUT_FILE
+
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Could not find {INPUT_FILE} in {folder}. Place the workbook and script in the same folder."
+        )
+
+    print("Penn State Emergency Medicine PubMed search")
+    print("Search dates are based on PubMed Entry Date (EDAT).\n")
+
+    start_date = prompt_date("Start date")
+    end_date = prompt_date("End date")
+
+    if datetime.strptime(start_date, "%Y/%m/%d") > datetime.strptime(end_date, "%Y/%m/%d"):
+        raise ValueError("The start date cannot be after the end date.")
+
+    output_name = (
+        "Penn_State_EM_EDAT_Results_"
+        f"{start_date.replace('/', '')}_to_{end_date.replace('/', '')}.xlsx"
+    )
+    output_path = folder / output_name
+
+    roster = pd.read_excel(input_path, sheet_name="Faculty Roster")
+    required_columns = {"Last Name", "First Name / Initial", "PubMed Initials"}
+    missing_columns = required_columns - set(roster.columns)
+    if missing_columns:
+        raise ValueError("The Faculty Roster sheet is missing: " + ", ".join(sorted(missing_columns)))
+
+    roster = roster.dropna(subset=["Last Name", "PubMed Initials"]).copy()
+    kept_matches: list[dict[str, Any]] = []
+    excluded_counts: defaultdict[str, int] = defaultdict(int)
+    article_cache: dict[str, dict[str, Any]] = {}
+
+    print(f"\nSearching {len(roster)} faculty members...")
+    print(f"EDAT range: {start_date} through {end_date}\n")
+
+    for number, (_, faculty) in enumerate(roster.iterrows(), start=1):
+        faculty_name = canonical_faculty_name(faculty)
+        query = build_query(faculty, start_date, end_date)
+        print(f"[{number}/{len(roster)}] {faculty_name}")
+        pmids = search_pmids(query)
+        print(f"    Raw PubMed results: {len(pmids)}")
+
+        missing_pmids = [pmid for pmid in pmids if pmid not in article_cache]
+        if missing_pmids:
+            for raw_record in fetch_records(missing_pmids):
+                parsed = parse_article(raw_record)
+                if parsed["PMID"]:
+                    article_cache[parsed["PMID"]] = parsed
+
+        kept_for_person = 0
+        for pmid in pmids:
+            article = article_cache.get(pmid)
+            if not article:
+                continue
+
+            confidence, reason, institution_match, em_match = classify_match(faculty, article)
+            if not keep_candidate(confidence, institution_match, em_match):
+                excluded_counts[confidence] += 1
+                continue
+
+            kept_for_person += 1
+            kept_matches.append({
+                "Faculty Name": faculty_name,
+                "Confidence": confidence,
+                "Reason": reason,
+                "PMID": article["PMID"],
+                "PubMed Entry Date": article["PubMed Entry Date"],
+                "Publication Date": article["Publication Date"],
+                "Title": article["Title"],
+                "Journal": article["Journal"],
+                "Authors": article["Authors"],
+                "Affiliations": article["Affiliations"],
+                "Penn State/Hershey Affiliation": "Yes" if institution_match else "No",
+                "Emergency Medicine Affiliation": "Yes" if em_match else "No",
+                "DOI": article["DOI"],
+                "Publication Types": article["Publication Types"],
+                "Search Query": query,
+            })
+
+        print(f"    Candidates retained: {kept_for_person}")
+        time.sleep(0.4)
+
+    columns = [
+        "Faculty Name", "Confidence", "Reason", "PMID", "PubMed Entry Date",
+        "Publication Date", "Title", "Journal", "Authors", "Affiliations",
+        "Penn State/Hershey Affiliation", "Emergency Medicine Affiliation",
+        "DOI", "Publication Types", "Search Query",
+    ]
+    results = pd.DataFrame(kept_matches, columns=columns)
+
+    if not results.empty:
+        rank = {"Likely": 0, "Needs Review": 1}
+        results["_rank"] = results["Confidence"].map(rank).fillna(9)
+        results = (
+            results.sort_values(["_rank", "Faculty Name", "PubMed Entry Date", "PMID"], ascending=[True, True, False, True])
+            .drop(columns=["_rank"])
+            .drop_duplicates(subset=["Faculty Name", "PMID"])
+        )
+
+    unique_columns = [
+        "PMID", "PubMed Entry Date", "Publication Date", "Title", "Journal",
+        "Authors", "Affiliations", "DOI", "Publication Types", "Matched Faculty",
+    ]
+
+    if results.empty:
+        unique = pd.DataFrame(columns=unique_columns)
+        summary = pd.DataFrame(columns=["Faculty Name", "Likely", "Needs Review", "Total Retained"])
+    else:
+        unique = (
+            results.groupby("PMID", as_index=False)
+            .agg({
+                "PubMed Entry Date": "first",
+                "Publication Date": "first",
+                "Title": "first",
+                "Journal": "first",
+                "Authors": "first",
+                "Affiliations": "first",
+                "DOI": "first",
+                "Publication Types": "first",
+                "Faculty Name": lambda values: "; ".join(dict.fromkeys(values)),
+            })
+            .rename(columns={"Faculty Name": "Matched Faculty"})
+        )
+
+        summary = (
+            results.groupby(["Faculty Name", "Confidence"], dropna=False)
+            .size()
+            .unstack(fill_value=0)
+            .reset_index()
+        )
+        for column in ["Likely", "Needs Review"]:
+            if column not in summary.columns:
+                summary[column] = 0
+        summary["Total Retained"] = summary["Likely"] + summary["Needs Review"]
+        summary = summary[["Faculty Name", "Likely", "Needs Review", "Total Retained"]]
+
+    with pd.ExcelWriter(output_path, engine="openpyxl") as writer:
+        unique.to_excel(writer, sheet_name="Unique Publications", index=False)
+        results.to_excel(writer, sheet_name="Faculty Matches", index=False)
+        summary.to_excel(writer, sheet_name="Review Summary", index=False)
+        format_sheet(writer, "Unique Publications", unique)
+        format_sheet(writer, "Faculty Matches", results)
+        format_sheet(writer, "Review Summary", summary)
+
+    print("\nFinished.")
+    print(f"Retained faculty-publication matches: {len(results)}")
+    print(f"Unique publications retained: {len(unique)}")
+    if excluded_counts:
+        print("Excluded matches: " + ", ".join(f"{k}={v}" for k, v in sorted(excluded_counts.items())))
+    print(f"\nResults saved to:\n{output_path}")
+
+
+if __name__ == "__main__":
+    main()
