@@ -45,84 +45,28 @@ if uploaded_file is not None:
 
     st.success(f"Roster validated: {len(roster)} faculty loaded")
 
-if st.button("Run Search", type="primary"):
+if st.button("Run Search"):
 
-    if roster is None:
+    if uploaded_file is None:
         st.error("Please upload a roster file.")
         st.stop()
+
+    roster = pd.read_excel(
+        uploaded_file,
+        sheet_name="Faculty Roster"
+    )
 
     start_string = start_date.strftime("%Y/%m/%d")
     end_string = end_date.strftime("%Y/%m/%d")
 
-    progress = st.progress(0)
-    status = st.empty()
+    results = run_search(
+        roster,
+        start_string,
+        end_string
+    )
 
-    kept_matches = []
-    article_cache = {}
+    st.success("Search complete")
 
-    total_faculty = len(roster)
+    st.write(f"Matches found: {len(results)}")
 
-    for idx, (_, faculty) in enumerate(roster.iterrows(), start=1):
-
-        faculty_name = canonical_faculty_name(faculty)
-        status.write(f"Processing {idx}/{total_faculty}: {faculty_name}")
-
-        query = build_query(faculty, start_string, end_string)
-        pmids = search_pmids(query)
-
-        missing_pmids = [p for p in pmids if p not in article_cache]
-
-        if missing_pmids:
-            for record in fetch_records(missing_pmids):
-                parsed = parse_article(record)
-                if parsed["PMID"]:
-                    article_cache[parsed["PMID"]] = parsed
-
-        for pmid in pmids:
-            article = article_cache.get(pmid)
-
-            if not article:
-                continue
-
-            confidence, reason, institution_match, em_match = classify_match(
-                faculty,
-                article,
-            )
-
-            if not keep_candidate(confidence, institution_match, em_match):
-                continue
-
-            kept_matches.append({
-                "Faculty Name": faculty_name,
-                "Confidence": confidence,
-                "Reason": reason,
-                "PMID": article["PMID"],
-                "PubMed Entry Date": article["PubMed Entry Date"],
-                "Publication Date": article["Publication Date"],
-                "Title": article["Title"],
-                "Journal": article["Journal"],
-                "DOI": article["DOI"],
-            })
-
-        progress.progress(idx / total_faculty)
-
-    results = pd.DataFrame(kept_matches)
-
-    status.success("Search complete")
-
-    st.metric("Faculty", total_faculty)
-    st.metric("Matches", len(results))
-
-    if results.empty:
-        st.warning("No matches found.")
-    else:
-        st.dataframe(results, use_container_width=True)
-
-        csv = results.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            label="Download Results CSV",
-            data=csv,
-            file_name="faculty_publications.csv",
-            mime="text/csv",
-        )
+    st.dataframe(results.head())
