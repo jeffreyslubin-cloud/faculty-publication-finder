@@ -1,4 +1,5 @@
 from collections import defaultdict
+from io import BytesIO
 import time
 
 import pandas as pd
@@ -11,6 +12,7 @@ from pubmed_faculty_edat_strict import (
     parse_article,
     classify_match,
     keep_candidate,
+    format_sheet,
 )
 
 
@@ -195,6 +197,14 @@ def run_search(
 
     if results.empty:
         unique = pd.DataFrame(columns=unique_columns)
+        summary = pd.DataFrame(
+            columns=[
+                "Faculty Name",
+                "Likely",
+                "Needs Review",
+                "Total Retained",
+            ]
+        )
     else:
         unique = (
             results.groupby("PMID", as_index=False)
@@ -212,4 +222,79 @@ def run_search(
             .rename(columns={"Faculty Name": "Matched Faculty"})
         )
 
+        summary = (
+            results.groupby(
+                ["Faculty Name", "Confidence"],
+                dropna=False
+            )
+            .size()
+            .unstack(fill_value=0)
+            .reset_index()
+        )
+
+        for column in ["Likely", "Needs Review"]:
+            if column not in summary.columns:
+                summary[column] = 0
+
+        summary["Total Retained"] = (
+            summary["Likely"]
+            + summary["Needs Review"]
+        )
+
+        summary = summary[
+            [
+                "Faculty Name",
+                "Likely",
+                "Needs Review",
+                "Total Retained",
+            ]
+        ]
+
     return results, unique, summary
+
+
+def build_workbook(
+    results,
+    unique,
+    summary
+):
+    output = BytesIO()
+
+    with pd.ExcelWriter(
+        output,
+        engine="openpyxl"
+    ) as writer:
+        unique.to_excel(
+            writer,
+            sheet_name="Unique Publications",
+            index=False
+        )
+        results.to_excel(
+            writer,
+            sheet_name="Faculty Matches",
+            index=False
+        )
+        summary.to_excel(
+            writer,
+            sheet_name="Review Summary",
+            index=False
+        )
+
+        format_sheet(
+            writer,
+            "Unique Publications",
+            unique
+        )
+        format_sheet(
+            writer,
+            "Faculty Matches",
+            results
+        )
+        format_sheet(
+            writer,
+            "Review Summary",
+            summary
+        )
+
+    output.seek(0)
+    return output.getvalue()
