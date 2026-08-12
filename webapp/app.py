@@ -18,6 +18,11 @@ st.title("Faculty Publication Finder")
 
 st.write("publication_engine imported successfully")
 
+test_mode = st.checkbox(
+    "Test Mode (first 10 faculty only)",
+    value=True
+)
+
 uploaded_file = st.file_uploader(
     "Upload Faculty Roster (.xlsx)",
     type=["xlsx"]
@@ -84,4 +89,4 @@ if st.button("Run Search"):
     st.dataframe(
         results,
         use_container_width=True
-    )
+)
