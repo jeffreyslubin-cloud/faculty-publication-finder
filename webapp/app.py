@@ -86,7 +86,7 @@ if st.button("Run Search"):
             f"{faculty_name}"
         )
 
-    results, unique = run_search(
+    results, unique, summary = run_search(
         roster,
         start_string,
         end_string,
@@ -124,5 +124,14 @@ if st.button("Run Search"):
 
     st.dataframe(
         unique,
+        use_container_width=True
+    )
+
+    st.subheader(
+        "Review Summary"
+    )
+
+    st.dataframe(
+        summary,
         use_container_width=True
     )
