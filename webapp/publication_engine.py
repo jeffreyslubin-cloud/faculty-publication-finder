@@ -29,6 +29,9 @@ def run_search(roster, start_date, end_date, progress_callback=None):
         start=1
     ):
 
+        if number > 3:
+            break
+            
         if progress_callback:
             progress_callback(
                 number,
