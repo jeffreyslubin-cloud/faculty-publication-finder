@@ -29,9 +29,6 @@ def run_search(roster, start_date, end_date, progress_callback=None):
         start=1
     ):
 
-        if number > 10:
-            break
-
         if progress_callback:
             progress_callback(
                 number,
@@ -48,6 +45,9 @@ def run_search(roster, start_date, end_date, progress_callback=None):
         )
 
         pmids = search_pmids(query)
+
+        import time
+        time.sleep(0.5)
 
         missing_pmids = [
             pmid
