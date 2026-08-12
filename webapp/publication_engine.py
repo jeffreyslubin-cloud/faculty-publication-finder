@@ -180,4 +180,36 @@ def run_search(
             )
         )
 
-    return results
+    unique_columns = [
+        "PMID",
+        "PubMed Entry Date",
+        "Publication Date",
+        "Title",
+        "Journal",
+        "Authors",
+        "Affiliations",
+        "DOI",
+        "Publication Types",
+        "Matched Faculty",
+    ]
+
+    if results.empty:
+        unique = pd.DataFrame(columns=unique_columns)
+    else:
+        unique = (
+            results.groupby("PMID", as_index=False)
+            .agg({
+                "PubMed Entry Date": "first",
+                "Publication Date": "first",
+                "Title": "first",
+                "Journal": "first",
+                "Authors": "first",
+                "Affiliations": "first",
+                "DOI": "first",
+                "Publication Types": "first",
+                "Faculty Name": lambda values: "; ".join(dict.fromkeys(values)),
+            })
+            .rename(columns={"Faculty Name": "Matched Faculty"})
+        )
+
+    return results, unique
