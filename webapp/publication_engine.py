@@ -212,4 +212,4 @@ def run_search(
             .rename(columns={"Faculty Name": "Matched Faculty"})
         )
 
-    return results, unique
+    return results, unique, summary
