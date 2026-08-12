@@ -59,14 +59,29 @@ if st.button("Run Search"):
     start_string = start_date.strftime("%Y/%m/%d")
     end_string = end_date.strftime("%Y/%m/%d")
 
+    progress_bar = st.progress(0)
+    status = st.empty()
+
+    def update_progress(current, total, faculty_name):
+
+        progress_bar.progress(current / total)
+
+        status.info(
+            f"Searching {current}/{total}: {faculty_name}"
+    )
+
     results = run_search(
         roster,
         start_string,
-        end_string
+        end_string,
+        progress_callback=update_progress
     )
 
     st.success("Search complete")
 
     st.write(f"Matches found: {len(results)}")
 
-    st.dataframe(results.head())
+    st.dataframe(
+        results,
+        use_container_width=True
+    )
