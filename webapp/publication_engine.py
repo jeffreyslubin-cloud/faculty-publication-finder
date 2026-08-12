@@ -111,4 +111,44 @@ def run_search(roster, start_date, end_date, progress_callback=None):
                 "Search Query": query,
             })
 
-    return pd.DataFrame(kept_matches)
+results = pd.DataFrame(kept_matches)
+
+if not results.empty:
+
+    rank = {
+        "Likely": 0,
+        "Needs Review": 1
+    }
+
+    results["_rank"] = (
+        results["Confidence"]
+        .map(rank)
+        .fillna(9)
+    )
+
+    results = (
+        results
+        .sort_values(
+            [
+                "_rank",
+                "Faculty Name",
+                "PubMed Entry Date",
+                "PMID"
+            ],
+            ascending=[
+                True,
+                True,
+                False,
+                True
+            ]
+        )
+        .drop(columns=["_rank"])
+        .drop_duplicates(
+            subset=[
+                "Faculty Name",
+                "PMID"
+            ]
+        )
+    )
+
+return results
